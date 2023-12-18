@@ -90,7 +90,7 @@ checkIfRoot() {
 }
 
 checkForPackages() {
-  local packages
+  local packages package
   packages=(fakechroot stty)
 
   for package in "${packages[@]}"; do
@@ -118,7 +118,7 @@ loadAssignment() {
       _BB=$'\e[44m' \
       _CB
 
-    local cols
+    local cols spaces
     cols=$(stty size | cut -d' ' -f2) || errorMsg "Could not obtain terminal size"
 
     spaces=$((cols > 80 ? 80 : cols))
@@ -143,10 +143,10 @@ loadAssignment() {
   local name="$AssignmentName""$orgext"
 
   ASSIGNMENTS+=("$name")
-  ASSIGNMENT_METADATA["$name"":namePretty"]="$AssignmentNamePretty"
-  ASSIGNMENT_METADATA["$name"":description"]="$AssignmentDescription"
-  ASSIGNMENT_METADATA["$name"":script"]="$1"
-  ASSIGNMENT_METADATA["$name"":organisation"]="$organisation"
+  ASSIGNMENT_METADATA["$name:namePretty"]="$AssignmentNamePretty"
+  ASSIGNMENT_METADATA["$name:description"]="$AssignmentDescription"
+  ASSIGNMENT_METADATA["$name:script"]="$1"
+  ASSIGNMENT_METADATA["$name:organisation"]="$organisation"
 
 }
 
@@ -257,14 +257,35 @@ prepareBaseEnvironment() {
 }
 
 loadTest() {
-  local TestName TestNamePretty
+  local TestName TestNamePretty \
+    TestStyle=basic TestMultiReportStyle=split
+
+  declare -a TestMultiNames TestMultiDescriptions
   
   # Example for shellcheck to shut up
   # shellcheck source=./tests/hello/basic.sh
   source "$1"
 
   TESTS+=("$TestName")
-  TEST_METADATA["$TestName"":namePretty"]="$TestNamePretty"
+  TEST_METADATA["$TestName:namePretty"]="$TestNamePretty"
+  TEST_METADATA["$TestName:testStyle"]="$TestStyle"
+
+  if [[ "$TestStyle" == multi ]]; then
+    TEST_METADATA["$TestName:testMultiReportStyle"]="${TestMultiReportStyle}"
+    
+    if [[ "${#TestMultiNames[@]}" -ne "${#TestMultiDescriptions[@]}" ]]; then
+      errorMsg "Test $TestName with style multi has differing counts of names and descriptions"
+      return 1
+    fi
+    TEST_METADATA["$TestName:testMultiNamesSize"]="${#TestMultiNames[@]}"
+    TEST_METADATA["$TestName:testMultiDescriptionsSize"]="${#TestMultiDescriptions[@]}"
+
+    local i
+    for i in $(seq "${#TestMultiNames[@]}"); do
+      TEST_METADATA["$TestName:testMultiNames:$i"]="${TestMultiNames[((i - 1))]}"
+      TEST_METADATA["$TestName:testMultiDescriptions:$i"]="${TestMultiDescriptions[((i - 1))]}"
+    done
+  fi
 }
 
 getCurrentOrgExt() {
@@ -277,7 +298,7 @@ getCurrentOrgExt() {
 
 loadAllTestsForCurrentAssignment() {
 
-  local orgext
+  local orgext file
   orgext="$(getCurrentOrgExt)"
 
   declare -a tests=("$(csdir)"/tests"$orgext"/"${USER_ASSIGNMENT%"$orgext"}"/*.sh)
@@ -289,20 +310,43 @@ loadAllTestsForCurrentAssignment() {
 
   for file in "${tests[@]}"; do
     [[ -d "$file" ]] && { errorMsg "Test $file is a directory"; continue; }
-    loadTest "$file"
+    loadTest "$file" || return
   done
+}
+
+getMultiReportStylePrefix() {  
+    case "${TEST_METADATA["$1"":testMultiReportStyle"]}" in
+      grouped) printf "%s " "-" ;;
+      split) ;;
+      *) errorMsg "Unknown report style in test $1" ; return 1 ;;
+    esac
+}
+
+testMsgBase() {
+  case "${TEST_METADATA["$1:testStyle"]}" in
+    basic)
+      printf "<%s> %s\n" "$2" "${TEST_METADATA["$1"":namePretty"]}"
+      ;;
+    multi)
+      local description
+      description="${TEST_METADATA["$1:testMultiDescriptions:$MULTI_RUN_INDEX"]}"
+      printf "%s<%s> %s\n" "$(getMultiReportStylePrefix "$1")" "$2" "$description"
+      ;;
+    *)
+      errorMsg "Test $1 has unknown test style - cannot print"
+      return 1
+      ;;    
+  esac
 }
 
 testFailMsg() {
   isTerminal && local _C=$'\e[31m' _R=$'\e[m'
-
-  printf "<${_C}FAIL${_R}> %s\n" "${TEST_METADATA["$1"":namePretty"]}"
+  testMsgBase "$1" "${_C}FAIL${_R}"
 }
 
 testSuccessMsg() {
   isTerminal && local _C=$'\e[32m' _R=$'\e[m'
-
-  printf "< ${_C}OK${_R} > %s\n" "${TEST_METADATA["$1"":namePretty"]}"
+  testMsgBase "$1" "${_C} OK ${_R}"
 }
 
 testtf() {
@@ -315,6 +359,7 @@ bytesLength() {
 
 # Makes path relative to default home of the environment
 envHome() {
+  # shellcheck disable=SC2153
   printf "%s%s/%s" "$ENVDIR" "$DEFHOME" "$1"
 }
 
@@ -485,46 +530,90 @@ expectedUserCommand() {
   return $((exitStatus | ((stdoutStatus > stderrStatus ? stdoutStatus : stderrStatus) << 6)))
 }
 
-testAssignment() {
-  local envdir outputtf orgext
+runTestBase() {
+  local envdir outputtf orgext testId="${1?}" status
+  shift 1
+
   orgext="$(getCurrentOrgExt)"
+  local fnprefix="test_${USER_ASSIGNMENT%"$orgext"}_${testId}"
   
-  for testId in "${TESTS[@]}"; do
-    local fnprefix="test_${USER_ASSIGNMENT%"$orgext"}_${testId}" status override
-    
-    envdir="$(prepareBaseEnvironment)" || {
-      errorMsg "Could not create base environment"
-      return 1
-    }
+  envdir="$(prepareBaseEnvironment)" || {
+    errorMsg "Could not create base environment"
+    return 1
+  }
 
-    outputtf="$(testtf)" || {
-      errorMsg "Failed to create temporary output file for test $testId"
-      return 1
-    }
+  outputtf="$(testtf)" || {
+    errorMsg "Failed to create temporary output file for test $testId"
+    return 1
+  }
 
-    ENVDIR="$envdir" "${fnprefix}_preparation" || {
-      errorMsg "Failed to run preparation script for test $testId"
-      return 1
-    }
+  ENVDIR="$envdir" "${fnprefix}_preparation" "$@" || {
+    errorMsg "Failed to run preparation script for test $testId"
+    return 1
+  }
 
-    isTerminal && override=yes
+  ENVDIR="$envdir" \
+    "${fnprefix}_test" "$@" > "$outputtf"
 
-    OVERRIDE_ISTERMINAL="$override" ENVDIR="$envdir" \
-      "${fnprefix}_test" > "$outputtf"
+  status=$?
 
-    # The previous line is just too damned long to put this in front of it
-    status=$?
+  if [[ "$status" -eq 0 ]]; then
+    testSuccessMsg "$testId"
+  else
+    testFailMsg "$testId"
+    cat "$outputtf"
+    rm -rf "$envdir" "$outputtf"
+    return 2
+  fi
 
+  rm -rf "$envdir" "$outputtf"
+}
+
+runBasicTest() {
+  runTestBase "$1"
+}
+
+runMultiTest() {
+  local it name status=0 outputs
+
+  outputs=$(testtf)
+
+  for it in $(seq "${TEST_METADATA["$1:testMultiNamesSize"]}"); do
+    name="${TEST_METADATA["$1:testMultiNames:$it"]}"
+    MULTI_RUN_INDEX="$it" runTestBase "$1" "$name" >> "$outputs"
+    status=$(( $? > status ? $? : status ))
+    [[ "$status" -ne 0 ]] && break
+  done
+
+  if [[ "${TEST_METADATA["$1:testMultiReportStyle"]}" == grouped ]]; then
+    local msg
+    isTerminal && local _FR=$'\e[31m' _FG=$'\e[32m' _R=$'\e[m'
     if [[ "$status" -eq 0 ]]; then
-      testSuccessMsg "$testId"
+      msg="${_FG} OK ${_R}"
     else
-      testFailMsg "$testId"
-      cat "$outputtf"
-      rm -rf "$envdir" "$outputtf"
-      return 2
+      msg="${_FR}FAIL${_R}"
     fi
 
-    rm -rf "$envdir" "$outputtf"
+    printf "<%s>: %s\n" "$msg" "${TEST_METADATA["$1:namePretty"]}"
+  fi
+
+  cat "$outputs"
+  rm "$outputs"
+
+  return $status
+}
+
+testAssignment() {
+  isTerminal && declare -x OVERRIDE_ISTERMINAL=yes
+
+  for testId in "${TESTS[@]}"; do
+    if [[ "${TEST_METADATA["$testId:testStyle"]}" == basic ]]; then
+      runBasicTest "$testId" || return
+    elif [[ "${TEST_METADATA["$testId:testStyle"]}" == multi ]]; then
+      runMultiTest "$testId" || return
+    else
+      errorMsg "Unknown test style in test $testId"
+    fi
   done
 }
 
