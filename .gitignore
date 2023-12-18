@@ -1,0 +1,4 @@
+# Ignore organisation specific files
+/assignments.*
+/tests.*
+/examples.*
