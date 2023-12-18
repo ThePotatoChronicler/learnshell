@@ -2,6 +2,7 @@
 
 # Constants
 readonly DEFHOME=/home/student
+readonly -a DEFENVDIRS=("$DEFHOME" "/tmp")
 # /Constants
 
 # Functions
@@ -250,7 +251,7 @@ prepareBaseEnvironment() {
     return 1
   }
 
-  mkdir -p "${envdir}${DEFHOME}"
+  mkdir -p "${envdir}${DEFHOME}" "${envdir}/tmp"
 
   printf "%s" "$envdir"
 }
@@ -377,6 +378,50 @@ testCompareFiles() {
   fi
 }
 
+# Makes sure there are no work files in selected directories
+# Defaults to /tmp and /home/student
+testVerifyWorkFiles() {
+  if [[ $# -eq 0 ]]; then
+    set -- "${DEFENVDIRS[@]}" "\0"
+  fi
+
+  declare -a args
+
+  local tf status=0 directory end_of_dirs=no
+
+  for directory; do
+    [[ "$directory" == "\0" ]] && { end_of_dirs=yes; args+=(")"); continue; }
+    if [[ "$end_of_dirs" == yes ]]; then
+      args+=("!" "-path" "${ENVDIR}$directory")
+    else
+      if (( "${#args[@]}" == 0 )); then
+        args+=("(" "-path" "${ENVDIR}${directory}/*")
+      else
+        args+=("-o" "-path" "${ENVDIR}${directory}/*")
+      fi
+    fi
+  done
+
+  tf=$(testtf)
+
+  find "$ENVDIR"  -mindepth 1 -type f "${args[@]}" -printf "/%P\n" >> "$tf"
+
+  [[ -s "$tf" ]] && {
+    isTerminal && local _C=$'\e[45m' _R=$'\e[m'
+
+    printf "%sFound extra work files%s\n" "$_C" "$_R"
+
+    cat "$tf"
+
+    printf "\n%sEnd of extra work files%s\n\n" "$_C" "$_R"
+
+    status=1
+  }
+
+  rm "$tf"
+  return $status
+}
+
 
 # shellcheck disable=SC2120
 runUserCommand() {
@@ -388,8 +433,28 @@ expectedUserCommand() {
   stdouttf="$(testtf)"
   stderrtf="$(testtf)"
 
-  local expectedStdout="$1" expectedStderr="$2" status=0
+  local expectedStdout="$1" expectedStderr="$2" status=0 dlt1=no dlt2=no
   shift 2
+
+  if [[ "$expectedStdout" =~ /dev/fd/[0-9]+ ]]; then
+    local stdoutCopy
+    stdoutCopy=$(testtf)
+
+    cat "$expectedStdout" > "$stdoutCopy"
+    expectedStdout="$stdoutCopy"
+
+    dlt1=yes
+  fi
+
+  if [[ "$expectedStderr" =~ /dev/fd/[0-9]+ ]]; then
+    local stderrCopy
+    stderrCopy=$(testtf)
+
+    cat "$expectedStderr" > "$stderrCopy"
+    expectedStderr="$stderrCopy"
+
+    dlt2=yes
+  fi
   
   runUserCommand "$@" <&0 >"$stdouttf" 2>"$stderrtf"
   # status=$?
@@ -401,6 +466,8 @@ expectedUserCommand() {
   status=$(($? > status ? $? : status))
 
   rm "$stdouttf" "$stderrtf"
+  [[ $dlt1 == yes ]] && rm "$expectedStdout"
+  [[ $dlt2 == yes ]] && rm "$expectedStderr"
 
   return $status
 }
