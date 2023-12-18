@@ -422,6 +422,12 @@ testVerifyWorkFiles() {
   return $status
 }
 
+reportDifferingStatusCodes() {
+  isTerminal && local _C=$'\e[30;46m' _R=$'\e[m'
+
+  printf "${_C}Expected status code: %s\n\n${_R}" "$1"
+  printf "${_C}Received status code: %s\n\n${_R}" "$2"
+}
 
 # shellcheck disable=SC2120
 runUserCommand() {
@@ -433,7 +439,7 @@ expectedUserCommand() {
   stdouttf="$(testtf)"
   stderrtf="$(testtf)"
 
-  local expectedStdout="$1" expectedStderr="$2" status=0 dlt1=no dlt2=no
+  local expectedStdout="$1" expectedStderr="$2" dlt1=no dlt2=no
   shift 2
 
   if [[ "$expectedStdout" =~ /dev/fd/[0-9]+ ]]; then
@@ -457,19 +463,26 @@ expectedUserCommand() {
   fi
   
   runUserCommand "$@" <&0 >"$stdouttf" 2>"$stderrtf"
-  # status=$?
+  local status=$?
 
   testCompareStdout "$expectedStdout" "$stdouttf"
-  status=$(($? > status ? $? : status))
+  local stdoutStatus=$?
 
   testCompareStderr "$expectedStderr" "$stderrtf"
-  status=$(($? > status ? $? : status))
+  local stderrStatus=$?
 
   rm "$stdouttf" "$stderrtf"
   [[ $dlt1 == yes ]] && rm "$expectedStdout"
   [[ $dlt2 == yes ]] && rm "$expectedStderr"
 
-  return $status
+  local exitStatus=0
+
+  if [[ "$EXPECT_STATUS" =~ ^[0-9]+$ ]] && (( "$EXPECT_STATUS" != status )); then
+    reportDifferingStatusCodes "$EXPECT_STATUS" "$status"
+    exitStatus=1
+  fi
+
+  return $((exitStatus | ((stdoutStatus > stderrStatus ? stdoutStatus : stderrStatus) << 6)))
 }
 
 testAssignment() {
