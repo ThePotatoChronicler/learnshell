@@ -114,7 +114,7 @@ getOrganisationFromScriptPath() {
 loadAssignment() {
   if isTerminal; then
     # Utilities for assignment scripts
-    local _B=$'\e[1m' _R=$'\e[m' \
+    local _B=$'\e[1m' _I=$'\e[3m' _U=$'\e[4m' _R=$'\e[m' \
       _BB=$'\e[44m' \
       _CB
 
@@ -296,13 +296,13 @@ loadAllTestsForCurrentAssignment() {
 testFailMsg() {
   isTerminal && local _C=$'\e[31m' _R=$'\e[m'
 
-  printf "< ${_C}FAIL${_R}> %s\n" "${TEST_METADATA["$1"":namePretty"]}"
+  printf "<${_C}FAIL${_R}> %s\n" "${TEST_METADATA["$1"":namePretty"]}"
 }
 
 testSuccessMsg() {
   isTerminal && local _C=$'\e[32m' _R=$'\e[m'
 
-  printf "<  ${_C}OK${_R} > %s\n" "${TEST_METADATA["$1"":namePretty"]}"
+  printf "< ${_C}OK${_R} > %s\n" "${TEST_METADATA["$1"":namePretty"]}"
 }
 
 testtf() {
