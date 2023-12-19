@@ -407,6 +407,11 @@ testVerifyPermissions() {
   return 1
 }
 
+# EVNDIR relative version of testVerifyPermissions
+testVerifyPermissions_r() {
+  testVerifyPermissions "$1" "$ENVDIR/$2" "$2"
+}
+
 # shellcheck disable=SC2059
 testCompareFiles() {
   isTerminal && local _C=$'\e[42m' _R=$'\e[m'
@@ -424,6 +429,11 @@ testCompareFiles() {
     echo
     return 1
   fi
+}
+
+# EVNDIR relative version of testCompareFiles
+testCompareFiles_r() {
+  testCompareFiles "$1" "$ENVDIR/$2" "$2"
 }
 
 # Makes sure there are no work files in selected directories
