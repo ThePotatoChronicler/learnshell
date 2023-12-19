@@ -607,7 +607,7 @@ runMultiTest() {
       msg="${_FR}FAIL${_R}"
     fi
 
-    printf "<%s>: %s\n" "$msg" "${TEST_METADATA["$1:namePretty"]}"
+    printf "<%s> %s\n" "$msg" "${TEST_METADATA["$1:namePretty"]}"
   fi
 
   cat "$outputs"
