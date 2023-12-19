@@ -177,8 +177,11 @@ usage0() {
 END
 
   for assignment in "${ASSIGNMENTS[@]}"; do
-    printf "%s\n" "$assignment|${ASSIGNMENT_METADATA["${assignment}:namePretty"]}"
-  done | column -t -s'|' -C name=ID -C name=Name
+    printf "%s\n" "$assignment"$'\t'"${ASSIGNMENT_METADATA["${assignment}:namePretty"]}"
+  done | {
+    column -t -s$'\t' -N ID,Name  2>/dev/null ||
+      { echo -e "ID\tName"; cat; }
+  }
 }
 
 printTitle() {
