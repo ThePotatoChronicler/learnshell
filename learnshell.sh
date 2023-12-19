@@ -28,6 +28,13 @@ elementIn() {
   return 1
 }
 
+getSudoOrAlternative() {
+  checkPackage "sudo" && printf "sudo" && return
+  checkPackage "doas" && printf "doas" && return
+
+  printf "sudo"
+}
+
 recommendPackageDownload() {
   local systemid installer
   systemid="$(getSystemId)"
@@ -47,7 +54,7 @@ END
     cat <<END | sed -E 's/^ {6}//'
 
       A command like this could work (although the package may be named differently):
-        $installer $1
+        $(getSudoOrAlternative) $installer $1
 END
   else
     cat <<END | sed -E 's/^ {6}//'
