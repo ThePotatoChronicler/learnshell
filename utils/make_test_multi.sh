@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 cat <<END
 # shellcheck shell=bash disable=SC2034
-TestName="multi"
+TestName="${3:-multi}"
 TestNamePretty="$2"
 TestStyle="multi"
 TestMultiNames=({00..00})
@@ -9,11 +9,11 @@ TestMultiDescriptions=(
   ""
 )
 
-test_${1}_multi_preparation() {
+test_${1}_${3:-multi}_preparation() {
   cp "\$(csdir)/in\$1.txt" "\${ENVDIR}/input.txt"
 }
 
-test_${1}_multi_test() {
+test_${1}_${3:-multi}_test() {
   expectedUserCommand "\$(csdir)/out\$1.txt" /dev/null
   local status=\$?
 
