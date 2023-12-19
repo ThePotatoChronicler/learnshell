@@ -98,7 +98,7 @@ checkIfRoot() {
 
 checkForPackages() {
   local packages package
-  packages=(fakechroot stty)
+  packages=(fakechroot)
 
   for package in "${packages[@]}"; do
     if ! checkPackage "$package"; then
@@ -123,14 +123,7 @@ loadAssignment() {
     # Utilities for assignment scripts
     local _B=$'\e[1m' _I=$'\e[3m' _U=$'\e[4m' _R=$'\e[m' \
       _BB=$'\e[44m' \
-      _CB
-
-    local cols spaces
-    cols=$(stty size | cut -d' ' -f2) || errorMsg "Could not obtain terminal size"
-
-    spaces=$((cols > 80 ? 80 : cols))
-
-    _CB=$'\e[44m'$(printf ' %.0s' $(seq "$spaces"))$'\e['"$spaces"'D'
+      _CB=$'\e[44m\e[80G\e[1K\e[G'
   fi
 
   
