@@ -460,7 +460,10 @@ testVerifyWorkFiles() {
     fi
   done
 
-  tf=$(testtf)
+  tf=$(testtf) || {
+    errorMsg "Could not create temporary file"
+    return 2
+  }
 
   find "$ENVDIR"  -mindepth 1 -type f "${args[@]}" -printf "/%P\n" >> "$tf"
 
@@ -494,15 +497,25 @@ runUserCommand() {
 }
 
 expectedUserCommand() {
-  stdouttf="$(testtf)"
-  stderrtf="$(testtf)"
+  stdouttf="$(testtf)" || {
+    errorMsg "Could not create temporary file for stdout"
+    return 2
+  }
+
+  stderrtf="$(testtf)" || {
+    errorMsg "Could not create temporary file for stderr"
+    return 2
+  }
 
   local expectedStdout="$1" expectedStderr="$2" dlt1=no dlt2=no
   shift 2
 
   if [[ "$expectedStdout" =~ /dev/fd/[0-9]+ ]]; then
     local stdoutCopy
-    stdoutCopy=$(testtf)
+    stdoutCopy=$(testtf) || {
+      errorMsg "Could not create temporary file for stdout copy"
+      return 2
+    }
 
     cat "$expectedStdout" > "$stdoutCopy"
     expectedStdout="$stdoutCopy"
@@ -512,7 +525,10 @@ expectedUserCommand() {
 
   if [[ "$expectedStderr" =~ /dev/fd/[0-9]+ ]]; then
     local stderrCopy
-    stderrCopy=$(testtf)
+    stderrCopy=$(testtf) || {
+      errorMsg "Could not create temporary file for stderr copy"
+      return 2
+    }
 
     cat "$expectedStderr" > "$stderrCopy"
     expectedStderr="$stderrCopy"
@@ -589,7 +605,10 @@ runBasicTest() {
 runMultiTest() {
   local it name status=0 outputs
 
-  outputs=$(testtf)
+  outputs=$(testtf) || {
+    errorMsg "Could not create temporary file for multi-test output"
+    return 2
+  }
 
   for it in $(seq "${TEST_METADATA["$1:testMultiNamesSize"]}"); do
     name="${TEST_METADATA["$1:testMultiNames:$it"]}"

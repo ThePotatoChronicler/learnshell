@@ -10,7 +10,7 @@ TestMultiDescriptions=(
 )
 
 test_${1}_${3:-multi}_preparation() {
-  cp "\$(csdir)/in\$1.txt" "\${ENVDIR}/input.txt"
+  cp "\$(csdir)/in\$1.txt" "\$ENVDIR/input.txt"
 }
 
 test_${1}_${3:-multi}_test() {
